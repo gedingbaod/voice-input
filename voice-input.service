@@ -1,0 +1,24 @@
+[Unit]
+Description=Voice input (F9 push-to-talk, SenseVoice ASR)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/zzfoo02/work/voice_input/run.sh
+Restart=on-failure
+RestartSec=5
+
+# 传给 run.sh 的默认参数（也可 systemctl --user edit voice-input 覆盖）
+# Environment=VOICE_INPUT_ARGS=--model sensevoice --sil-ms 400 --hotkey <f9>
+
+# 保证在 X11 会话下能拿到 DISPLAY / XAUTHORITY
+Environment=DISPLAY=:1
+Environment=XAUTHORITY=/home/zzfoo02/.Xauthority
+
+# 崩了之后别死循环起（10s 内 5 次失败就停手）
+StartLimitBurst=5
+StartLimitIntervalSec=10
+
+[Install]
+WantedBy=graphical-session.target
