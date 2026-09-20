@@ -108,10 +108,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     def on_hotkey():
+        print("[hotkey] F9 触发", file=sys.stderr, flush=True)
         if not recognizer.running:
             recognizer.start()
         else:
             # stop 阻塞 → 后台线程跑
+            print("[hotkey] 停止录音", file=sys.stderr, flush=True)
             threading.Thread(target=recognizer.stop, daemon=True,
                              name="stop").start()
 

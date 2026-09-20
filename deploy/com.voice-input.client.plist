@@ -6,33 +6,31 @@
     <key>Label</key>
     <string>com.voice-input.client</string>
 
-    <!-- 用的解释器：Miniconda base 的 python3（依赖都在它上面） -->
+    <!-- 必须经 LaunchServices（open）拉起 App，辅助功能授权才能关联到
+         VoiceInput.app；直接执行内部脚本会让授权失效（责任进程=launchd）。
+         -W：等 App 退出，保持 launchd KeepAlive 语义 -->
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/Caskroom/miniconda/base/bin/python3</string>
-        <string>-u</string>
-        <string>-m</string>
-        <string>client</string>
+        <string>/usr/bin/open</string>
+        <string>-W</string>
+        <string>-a</string>
+        <string>@APP@</string>
     </array>
 
-    <!-- 项目根目录（client 包所在处） -->
     <key>WorkingDirectory</key>
-    <string>/Users/zzfoo/SRC/voice-input</string>
+    <string>@ROOT@</string>
 
-    <!-- 登录后自动启动；崩溃自动拉起 -->
+    <!-- 登录后自动启动；崩溃自动拉起（间隔≥10s） -->
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
-
-    <!-- 崩溃重启间隔：至少 10s，避免疯狂重启 -->
     <key>ThrottleInterval</key>
     <integer>10</integer>
 
-    <!-- 日志 -->
     <key>StandardOutPath</key>
-    <string>/Users/zzfoo/Library/Logs/voice-input.log</string>
+    <string>@HOME@/Library/Logs/voice-input.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/zzfoo/Library/Logs/voice-input.log</string>
+    <string>@HOME@/Library/Logs/voice-input.log</string>
 </dict>
 </plist>
