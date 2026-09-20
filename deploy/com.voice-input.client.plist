@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.voice-input.client</string>
+
+    <!-- 用的解释器：Miniconda base 的 python3（依赖都在它上面） -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/Caskroom/miniconda/base/bin/python3</string>
+        <string>-u</string>
+        <string>-m</string>
+        <string>client</string>
+    </array>
+
+    <!-- 项目根目录（client 包所在处） -->
+    <key>WorkingDirectory</key>
+    <string>/Users/zzfoo/SRC/voice-input</string>
+
+    <!-- 登录后自动启动；崩溃自动拉起 -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- 崩溃重启间隔：至少 10s，避免疯狂重启 -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- 日志 -->
+    <key>StandardOutPath</key>
+    <string>/Users/zzfoo/Library/Logs/voice-input.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/zzfoo/Library/Logs/voice-input.log</string>
+</dict>
+</plist>
