@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(systemctl --user status voice-input*)",
+      "Bash(systemctl --user restart voice-input*)",
+      "Bash(systemctl --user start voice-input*)",
+      "Bash(systemctl --user stop voice-input*)",
+      "Bash(systemctl --user daemon-reload*)",
+      "Bash(journalctl --user -u voice-input*)",
+      "Bash(~/work/test/.venv/bin/python -m py_compile*)"
+    ]
+  }
+}
