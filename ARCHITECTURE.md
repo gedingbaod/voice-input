@@ -1,15 +1,23 @@
-# voice-input 架构设计（v6：客户端 / 服务端分离）
+# voice-input 架构设计（v7：ABC 基类模块化）
 
-> 目标：把现有 Linux X11 单机脚本改造成 **客户端 + 服务端** 两层结构；
-> 客户端跨 Mac / Linux / Windows **同一份代码**；服务端**唯一**，就是
-> Mac 上的 omlx 0.6.4（OpenAI 兼容 ASR）。
+> 目标：跨 Mac / Linux / Windows 的语音输入客户端；服务端**唯一**，
+> 是 Mac 上的 omlx 0.6.4（OpenAI 兼容 ASR）。
+> **详细平台开发文档见 `docs/PLATFORM_GUIDE.md`（面向 AI 工具，含线程模型、
+> 新增平台步骤、各平台验收清单）。**
 >
 > **变更历史**：
-> - **v6**（2026-09-20）：用户反馈"服务端只有一个 = Mac omlx，所有客户端连它"，
->   改为默认 `base_url=http://192.168.31.54:9999/v1`，**Mac 本机客户端也走局域网 IP**；
->   客户端支持 Mac / Linux / **Windows**（之前不做 Windows，现加上）；
->   所有客户端**统一 F9**；**删除 server/ 子项目**（不需要自建服务端）。
->
+> - **v7**（2026-09-20）：模块化重构。Protocol 接口 → **ABC 基类体系**
+>   （`BaseHotkey/BaseAudioCapture/BaseInjector/BaseWindowProbe/BaseFeedback/
+>   BasePlatform`）；sounddevice 录音/PrintFeedback 下沉为共享实现；
+>   平台注册表 + `--platform` 调试开关；**Linux 平台已实现**（迁移自
+>   旧版 asr_hotkey.py，待真机回归）；Windows 骨架（TODO 带原型代码）。
+>   新增 `docs/PLATFORM_GUIDE.md`。
+> - **v6**（2026-09-20）：客户端/服务端分离。唯一服务端 = Mac omlx
+>   （`http://192.168.31.54:9999/v1`，Bearer 123456）；统一 F9；
+>   Mac 本机客户端也走局域网 IP；不做自建 server。
+> - **模型演进**：SenseVoiceSmall（无标点）→ +Qwen3-30B 补标点（太重，19GB）
+>   → **Qwen3-ASR-1.7B-8bit 单模型**（原生标点+术语规范，2.46GB，0.2-0.5s/句，
+>   当前默认）。录音模式演进：VAD 流式断句（丢字）→ **whole 整段模式**（默认）。
 > **调研已确认的事实（2026-09-20）**：
 > 1. Mac 上的 **omlx 0.6.4**（带 UI，浏览器访问 `http://127.0.0.1:9999/`，密码 123456）
 >    已经原生支持 **`POST /v1/audio/transcriptions`**（OpenAI Whisper 兼容，Bearer auth），
@@ -45,20 +53,20 @@
             ▼                                            ▼                            ▼
 ┌────────────────────────┐                ┌────────────────────────┐    ┌────────────────────────┐
 │ Mac 客户端              │                │ Linux 客户端            │    │ Windows 客户端          │
-│ client_macos.py        │                │ client_linux.py        │    │ client_windows.py      │
+│ platform/macos.py      │                │ platform/linux.py      │    │ platform/windows.py    │
 │  ┌──────┐ ┌────┐ ┌───┐ │                │  ┌──────┐ ┌────┐ ┌───┐ │    │  ┌──────┐ ┌────┐ ┌───┐ │
 │  │录音  │→│ASR │→│注入││                │  │录音  │→│ASR │→│注入││    │  │录音  │→│ASR │→│注入││
-│  │+ VAD │ │客户端│ │  │ │                │  │+ VAD │ │客户端│ │  │ │    │  │+ VAD │ │客户端│ │  │ │
 │  └──────┘ └────┘ └───┘ │                │  └──────┘ └────┘ └───┘ │    │  └──────┘ └────┘ └───┘ │
-│  按 F9 开始/停止        │                │  按 F9 开始/停止        │    │  按 F9 开始/停止        │
+│  按 F9 录整段→再按出字  │                │  按 F9 录整段→再按出字  │    │  按 F9 录整段→再按出字  │
 └────────────────────────┘                └────────────────────────┘    └────────────────────────┘
+         │     三平台共用 core.py + asr_client.py + app.py（见 docs/PLATFORM_GUIDE.md）    │
 ```
 
 **关键点**：
 - **唯一服务端**：Mac 上的 omlx 0.6.4，对外地址 `http://192.168.31.54:9999/v1`
-- **客户端代码完全一致**，只有平台适配层（hotkey / audio / inject / window）不同
+- **核心代码一份**（core/asr_client/app），只有平台适配层（platform/）按 OS 分文件
 - **Mac 本机客户端也连 `192.168.31.54:9999`**（不搞 localhost 特例）
-- 所有客户端都是 **F9 快捷键**
+- 所有客户端都是 **F9 快捷键**、**whole 整段录音模式**（按 F9 开始→再按 F9 停止→整段识别）
 
 ---
 

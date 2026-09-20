@@ -1,4 +1,4 @@
-"""主入口：装平台 → 装 ASR → 跑主循环。
+"""主入口：检测操作系统 → 选平台实现 → 装 ASR → 跑主循环。
 
 用法：
   python -m client
@@ -17,7 +17,30 @@ import threading
 from .asr_client import ASRError, AsrClient
 from .config import load_config, print_config
 from .core import StreamRecognizer
-from .platform import make_platform
+from .platform import detect_platform_name, make_platform
+
+# sys.platform → 人类可读的操作系统名（启动横幅用）
+_OS_FRIENDLY = {
+    "darwin": "macOS",
+    "linux": "Linux",
+    "win32": "Windows",
+}
+
+
+def _print_os_banner(forced: str | None) -> str:
+    """入口第一件事：报告操作系统检测结果，返回平台名。"""
+    detected = detect_platform_name()
+    friendly = _OS_FRIENDLY.get(sys.platform, sys.platform)
+    if forced:
+        note = f"（自动检测为 {detected}，被 --platform 覆盖）"
+        print(f"[init] 操作系统: {friendly} ({sys.platform}) {note}",
+              file=sys.stderr, flush=True)
+        print(f"[init] 使用平台实现: {forced}", file=sys.stderr, flush=True)
+        return forced
+    print(f"[init] 操作系统: {friendly} ({sys.platform})",
+          file=sys.stderr, flush=True)
+    print(f"[init] 使用平台实现: {detected}", file=sys.stderr, flush=True)
+    return detected
 
 
 def _setup_logging(debug: bool) -> None:
@@ -31,7 +54,15 @@ def _setup_logging(debug: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     cfg = load_config(argv)
-    platform = make_platform(sound=cfg.sound, notify=cfg.notify)
+
+    # ① 入口先判断操作系统，并打印；② 按结果选平台实现
+    platform_name = _print_os_banner(cfg.platform)
+    try:
+        platform = make_platform(name=platform_name,
+                                 sound=cfg.sound, notify=cfg.notify)
+    except (NotImplementedError, ValueError, RuntimeError) as e:
+        print(f"[fatal] {e}", file=sys.stderr)
+        return 2
     _setup_logging(cfg.vad.debug)
 
     print_config(cfg, platform.name)

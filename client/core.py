@@ -24,7 +24,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from .asr_client import ASRError, AsrClient
-from .platform.base import AudioCapture, Injector
+from .platform.base import BaseAudioCapture, BaseFeedback, BaseInjector
 
 log = logging.getLogger("voice-input.core")
 
@@ -67,8 +67,8 @@ class StreamRecognizer:
     def __init__(
         self,
         asr: AsrClient,
-        audio: AudioCapture,
-        injector: Injector,
+        audio: BaseAudioCapture,
+        injector: BaseInjector,
         vad_cfg: VADConfig,
         on_segment: Optional[Callable[[SegmentEvent], None]] = None,
         punctuator=None,  # Optional[Punctuator]；None = 不做标点修复

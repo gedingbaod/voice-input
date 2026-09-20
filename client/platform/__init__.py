@@ -1,44 +1,71 @@
-"""平台工厂：按 sys.platform 自动选 OS 实现。"""
+"""平台工厂与注册表。
+
+自动按 sys.platform 选择；--platform 参数可强制指定（调试用，比如在
+Mac 上强制跑 linux 平台类做静态检查——运行时调用系统命令会失败，
+但 import / 构造路径可验证）。
+
+新增平台步骤：
+  1. 写 client/platform/<name>.py，实现 XxxPlatform(BasePlatform)
+  2. 在下方 REGISTRY 加一行
+  3. 完成。核心代码（core.py / app.py）零改动。
+"""
 from __future__ import annotations
 
 import sys
 
-from .base import AudioCapture, Hotkey, Injector, Platform, WindowProbe
+from .base import (
+    BaseAudioCapture,
+    BaseFeedback,
+    BaseHotkey,
+    BaseInjector,
+    BasePlatform,
+    BaseWindowProbe,
+    SharedSoundDeviceAudio,
+    PrintFeedback,
+)
+
+# sys.platform 值 → 平台类。延迟 import（macos_feedback 的 rumps 是可选依赖）
+_REGISTRY_KEYS = {
+    "darwin": ("macos", "MacPlatform"),
+    "linux": ("linux", "LinuxPlatform"),
+    "win32": ("windows", "WindowsPlatform"),
+}
 
 
-def make_platform(sound: bool = True, notify: bool = True):
-    """根据当前 OS 返回一组平台实现。"""
-    if sys.platform == "darwin":
-        from .macos import MacAudio, MacHotkey, MacInjector, MacWindowProbe
-        from .macos_feedback import MacFeedback
-        feedback = MacFeedback(sound=sound, notify=notify)
-        return Platform(
-            hotkey=MacHotkey(),
-            audio=MacAudio(),
-            injector=MacInjector(),
-            window=MacWindowProbe(),
-            name="macos",
-            feedback=feedback,
-            ui_loop=feedback.run_forever,  # rumps 菜单栏接管主线程
-        )
-    if sys.platform.startswith("linux"):
-        # 第二批交付
-        raise NotImplementedError(
-            "Linux 客户端在第二批交付；当前批次仅 macOS"
-        )
-    if sys.platform == "win32":
-        # 第三批交付
-        raise NotImplementedError(
-            "Windows 客户端在第三批交付；当前批次仅 macOS"
-        )
+def _load_platform_class(name: str) -> type[BasePlatform]:
+    if name == "macos":
+        from .macos import MacPlatform
+        return MacPlatform
+    if name == "linux":
+        from .linux import LinuxPlatform
+        return LinuxPlatform
+    if name == "windows":
+        from .windows import WindowsPlatform
+        return WindowsPlatform
+    raise ValueError(f"unknown platform: {name!r}（可选：{list(_REGISTRY_KEYS.values())}）")
+
+
+def detect_platform_name() -> str:
+    """按 sys.platform 返回平台名。"""
+    for key, (name, _cls) in _REGISTRY_KEYS.items():
+        if sys.platform == key or sys.platform.startswith(key):
+            return name
     raise RuntimeError(f"unsupported platform: {sys.platform!r}")
 
 
+def make_platform(name: str | None = None,
+                  sound: bool = True, notify: bool = True) -> BasePlatform:
+    """构造平台对象。name=None 自动检测。"""
+    name = name or detect_platform_name()
+    cls = _load_platform_class(name)
+    plat = cls()
+    plat.init_feedback(sound=sound, notify=notify)
+    return plat
+
+
 __all__ = [
-    "AudioCapture",
-    "Hotkey",
-    "Injector",
-    "Platform",
-    "WindowProbe",
-    "make_platform",
+    "BaseAudioCapture", "BaseFeedback", "BaseHotkey", "BaseInjector",
+    "BasePlatform", "BaseWindowProbe", "SharedSoundDeviceAudio",
+    "PrintFeedback",
+    "detect_platform_name", "make_platform",
 ]

@@ -1,14 +1,14 @@
 """macOS 平台实现。
 
-依赖：
-  - sounddevice（pip install sounddevice）
-  - pynput（pip install pynput）
-  - 系统命令：pbcopy, osascript（系统自带）
+组件：
+  - MacHotkey        pynput GlobalHotKeys（需"辅助功能"权限）
+  - MacAudio         继承 SharedSoundDeviceAudio（sounddevice 三平台通用）
+  - MacInjector      pbcopy 写剪贴板 + osascript 发 Cmd+V
+  - MacWindowProbe   osascript 查前台应用名判断是否终端
 
-权限：
-  - 首次运行需手动授予"辅助功能"（System Settings → Privacy & Security → Accessibility）
-    给执行 python 的终端 / IDE，否则 pynput 收不到全局按键。
-  - 首次录音会弹麦克风权限请求，正常同意即可。
+权限（首次运行，详见 README）：
+  1. 系统设置 → 隐私与安全 → 辅助功能 → 允许运行 python 的 App
+  2. 麦克风权限弹窗 → 允许
 """
 from __future__ import annotations
 
@@ -17,16 +17,16 @@ import sys
 import threading
 from typing import Callable
 
-import numpy as np
+from .base import (
+    BaseAudioCapture,
+    BaseHotkey,
+    BaseInjector,
+    BasePlatform,
+    BaseWindowProbe,
+    SharedSoundDeviceAudio,
+)
 
-from .base import AudioCapture, Hotkey, Injector, WindowProbe
-
-# 16kHz mono float32, 30ms 帧
-SAMPLERATE = 16000
-FRAME_MS = 30
-FRAME_SAMPLES = SAMPLERATE * FRAME_MS // 1000  # 480
-
-# Mac 终端类应用名关键词（osascript 拿到的 process name，小写匹配）
+# Mac 终端类应用名关键词（osascript 返回 process name，小写匹配）
 _TERMINAL_APP_KEYWORDS = (
     "terminal", "iterm", "warp", "alacritty", "kitty",
     "wezterm", "tilix", "terminator", "hyper", "tabby",
@@ -34,115 +34,65 @@ _TERMINAL_APP_KEYWORDS = (
 )
 
 
-def _run(cmd: list[str], timeout: float = 2.0, input_bytes: bytes | None = None) -> subprocess.CompletedProcess:
+def _run(cmd: list[str], timeout: float = 2.0,
+         input_bytes: bytes | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        cmd, capture_output=True, timeout=timeout,
-        check=False, input=input_bytes,
+        cmd, capture_output=True, timeout=timeout, check=False,
+        input=input_bytes,
     )
 
 
 # ---------- 热键 ----------
 
-class MacHotkey:
+class MacHotkey(BaseHotkey):
+    """pynput GlobalHotKeys 包装。macOS 需辅助功能权限。"""
+
     def __init__(self):
-        self._listener = None  # pynput GlobalHotKeys 实例
-        self._key: str | None = None
-        self._cb: Callable[[], None] | None = None
+        self._listener = None
         self._lock = threading.Lock()
 
     def register(self, key: str, on_press: Callable[[], None]) -> None:
+        from pynput import keyboard  # 延迟 import，错误信息更友好
         with self._lock:
-            self._key = key
-            self._cb = on_press
             if self._listener is not None:
                 self._listener.stop()
-            # GlobalHotKeys 接受 {key: callback} 字典
-            self._listener = _GlobalHotKeys({key: on_press})
+            self._listener = keyboard.GlobalHotKeys({key: on_press})
             self._listener.daemon = True
             self._listener.start()
 
     def run(self) -> None:
-        # 已 start；这里阻塞直到 KeyboardInterrupt
         try:
             while True:
                 threading.Event().wait(1.0)
         except KeyboardInterrupt:
             pass
 
-    def __del__(self):
-        try:
-            if self._listener is not None:
-                self._listener.stop()
-        except Exception:
-            pass
-
-
-# 用一个轻子类避免顶层 import 时 pynput 报缺依赖；并便于测试 mock
-try:
-    from pynput import keyboard as _kb
-    _GlobalHotKeys = _kb.GlobalHotKeys
-except Exception as _e:  # pragma: no cover
-    _GlobalHotKeys = None  # type: ignore
-    _IMPORT_ERR = _e
-
 
 # ---------- 录音 ----------
 
-class MacAudio(AudioCapture):
-    def __init__(self):
-        self._stream = None
-        self._cb: Callable[[np.ndarray], None] | None = None
-
-    def start(self, on_frame: Callable[[np.ndarray], None]) -> None:
-        import sounddevice as sd  # 局部 import，便于平台层单测时跳过
-        self._cb = on_frame
-
-        def _cb(indata, frames, t, status):
-            if status:
-                # 不致命，打一行就够
-                print(f"[audio] {status}", file=sys.stderr)
-            if self._cb is not None:
-                # indata: (N, 1) float32
-                self._cb(indata.copy().reshape(-1))
-
-        self._stream = sd.InputStream(
-            samplerate=SAMPLERATE,
-            channels=1,
-            dtype="float32",
-            blocksize=FRAME_SAMPLES,
-            callback=_cb,
-        )
-        self._stream.start()
-
-    def stop(self) -> None:
-        if self._stream is not None:
-            try:
-                self._stream.stop()
-                self._stream.close()
-            finally:
-                self._stream = None
-                self._cb = None
+class MacAudio(SharedSoundDeviceAudio):
+    """macOS 无特殊需求，直接用 sounddevice 共享实现（会弹麦克风授权）。"""
 
 
 # ---------- 注入 ----------
 
-class MacInjector(Injector):
-    """写剪贴板 + 发 Cmd+V。Mac 终端（Terminal/iTerm2/Warp 等）都支持 Cmd+V。"""
+class MacInjector(BaseInjector):
+    """pbcopy 写剪贴板 + osascript 发 Cmd+V。
+    Mac 所有终端（Terminal/iTerm2/Warp/…）都支持 Cmd+V，无需分支。"""
 
     # osascript 错误 1002 = "not authorized to send keystroke"
-    # 通常因为 python 进程没拿到"辅助功能"权限
     _ERR_NOT_AUTHORIZED = b"1002"
 
     def inject(self, text: str) -> None:
         if not text:
             return
         try:
-            # 1. 写剪贴板（不需要任何权限）
+            # 1. 写剪贴板（不需要权限）
             r = _run(["pbcopy"], input_bytes=text.encode("utf-8"), timeout=2.0)
             if r.returncode != 0:
                 print(f"[inject] pbcopy failed: {r.stderr}", file=sys.stderr)
                 return
-            # 2. 发 Cmd+V（需要"辅助功能"权限）
+            # 2. 发 Cmd+V（需要辅助功能权限）
             script = (
                 'tell application "System Events" '
                 'to keystroke "v" using command down'
@@ -153,10 +103,8 @@ class MacInjector(Injector):
                 if self._ERR_NOT_AUTHORIZED in err:
                     print(
                         "[inject] 剪贴板已写入，但无法发送按键 (错误 1002)。\n"
-                        "         请到 系统设置 → 隐私与安全 → 辅助功能，"
-                        "把你运行 python 的应用（Terminal / iTerm / VSCode 等）\n"
-                        "         加入允许列表，然后重启客户端。\n"
-                        "         文本已落到剪贴板，可手动 Cmd+V 验证。",
+                        "         系统设置 → 隐私与安全 → 辅助功能 → "
+                        "允许运行 python 的 App，然后重启客户端。",
                         file=sys.stderr,
                     )
                 else:
@@ -169,12 +117,11 @@ class MacInjector(Injector):
 
 # ---------- 焦点窗口探测 ----------
 
-class MacWindowProbe(WindowProbe):
-    """用 osascript 拿当前最前应用名。"""
+class MacWindowProbe(BaseWindowProbe):
+    """osascript 拿前台应用名。"""
 
     def is_terminal(self) -> bool:
         try:
-            # 'System Events' -> first application process whose frontmost is true
             script = (
                 'tell application "System Events" to get name of '
                 '(first application process whose frontmost is true)'
@@ -186,3 +133,35 @@ class MacWindowProbe(WindowProbe):
             return any(k in name for k in _TERMINAL_APP_KEYWORDS)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
+
+
+# ---------- 平台聚合 ----------
+
+class MacPlatform(BasePlatform):
+    """macOS。feedback 用 rumps 菜单栏 + 系统音 + 通知（见 macos_feedback.py）。"""
+
+    name = "macos"
+
+    def create_hotkey(self) -> BaseHotkey:
+        return MacHotkey()
+
+    def create_audio(self) -> BaseAudioCapture:
+        return MacAudio()
+
+    def create_injector(self) -> BaseInjector:
+        return MacInjector()
+
+    def create_window_probe(self) -> BaseWindowProbe:
+        return MacWindowProbe()
+
+    def create_feedback(self, sound: bool = True, notify: bool = True):
+        from .macos_feedback import MacFeedback  # 延迟：rumps 可选依赖
+        return MacFeedback(sound=sound, notify=notify)
+
+    @property
+    def ui_loop(self):
+        # rumps 菜单栏接管主线程；feedback 未初始化时走 None（app 会兜底）
+        fb = getattr(self, "_feedback", None)
+        if fb is not None and hasattr(fb, "run_forever"):
+            return fb.run_forever
+        return None

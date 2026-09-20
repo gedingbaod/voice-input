@@ -13,6 +13,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+from .base import BaseFeedback
+
 try:
     import rumps  # type: ignore
     _HAS_RUMPS = True
@@ -56,7 +58,7 @@ def _notify(title: str, body: str) -> None:
         pass
 
 
-class MacFeedback:
+class MacFeedback(BaseFeedback):
     """提示音 + 通知 + 菜单栏。sound/notify 开关由构造方传入。"""
 
     def __init__(self, sound: bool = True, notify: bool = True):
@@ -120,14 +122,8 @@ class MacFeedback:
     # ---------- 主循环 ----------
 
     def run_forever(self) -> None:
-        """接管主线程（rumps 菜单栏）。Ctrl+C / 菜单退出后返回。"""
+        """接管主线程（rumps 菜单栏）。菜单退出后返回。"""
         if self._app is not None:
             self._app.run()
         else:
-            # 无 rumps：退化为纯阻塞
-            import threading
-            try:
-                while True:
-                    threading.Event().wait(1.0)
-            except KeyboardInterrupt:
-                pass
+            super().run_forever()  # 无 rumps：基类的阻塞实现

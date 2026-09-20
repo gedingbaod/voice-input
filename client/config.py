@@ -38,6 +38,7 @@ class Config:
     mode: str          # "whole" 整段录音（默认）| "vad" 流式断句
     sound: bool        # 提示音
     notify: bool       # 通知横幅
+    platform: str | None  # 强制平台（None=自动检测）
 
 
 def load_config(argv: list[str] | None = None) -> Config:
@@ -53,6 +54,10 @@ def load_config(argv: list[str] | None = None) -> Config:
                     help=f"ASR 模型名（默认 {DEFAULT_MODEL}）")
     ap.add_argument("--hotkey", default=None,
                     help="全局热键（pynput 语法，默认 <f9>）")
+    ap.add_argument("--platform", default=None,
+                    choices=["macos", "linux", "windows"],
+                    help="强制指定平台（默认按 sys.platform 自动检测；"
+                         "调试用，如远程改完 linux 代码在本机验证 import）")
     ap.add_argument("--mode", choices=["whole", "vad"], default=None,
                     help="whole=按F9录整段再按F9停止后一次识别（默认，"
                          "不切句不丢字）；vad=说话停顿自动断句流式出字")
@@ -155,6 +160,7 @@ def load_config(argv: list[str] | None = None) -> Config:
         mode=mode,
         sound=not args.no_sound,
         notify=not args.no_notify,
+        platform=args.platform,
     )
 
 
