@@ -9,5 +9,9 @@
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>语音输入需要使用麦克风录音并转成文字。</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>语音输入需要识别麦克风录音内容。</string>
 </dict>
 </plist>
