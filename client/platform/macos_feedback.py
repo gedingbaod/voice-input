@@ -28,8 +28,9 @@ _SND_STOP = "/System/Library/Sounds/Tink.aiff"
 _SND_RESULT = "/System/Library/Sounds/Glass.aiff"
 _SND_ERROR = "/System/Library/Sounds/Sosumi.aiff"
 
-TITLE_IDLE = "🎤"
-TITLE_REC = "🔴"
+# 菜单栏标题：emoji（🎤/🔴）在部分 macOS 上渲染为零宽度=隐形，用文本符号
+TITLE_IDLE = "◉"        # 空闲
+TITLE_REC = "●REC"      # 录音中
 
 
 def _play(path: str) -> None:

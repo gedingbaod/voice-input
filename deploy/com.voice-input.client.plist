@@ -6,15 +6,18 @@
     <key>Label</key>
     <string>com.voice-input.client</string>
 
-    <!-- 必须经 LaunchServices（open）拉起 App，辅助功能授权才能关联到
-         VoiceInput.app；直接执行内部脚本会让授权失效（责任进程=launchd）。
-         -W：等 App 退出，保持 launchd KeepAlive 语义 -->
+    <!-- launchd 直接跑 python -m client（不经 App bundle）。
+         关键结论（2026-09-21 排查确认）：
+           - 辅助功能授权授给 python 解释器本身即可，信任生效；
+           - 经 App bundle(open/-a) 启动会让 NSStatusItem 菜单栏图标不可见
+             （accessory 上下文问题）——所以直跑 python 最稳，图标+F9 都正常。
+         唯一代价：python 解释器路径变化时要重新在辅助功能里授权。 -->
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/open</string>
-        <string>-W</string>
-        <string>-a</string>
-        <string>@APP@</string>
+        <string>@PY@</string>
+        <string>-u</string>
+        <string>-m</string>
+        <string>client</string>
     </array>
 
     <key>WorkingDirectory</key>
